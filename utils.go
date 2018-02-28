@@ -23,7 +23,8 @@ import (
 	"sort"
 )
 
-// Just a bunch of utility functions
+// Just a bunch of utility functions.
+
 
 // Function to Return true/false depending on whether a file exists
 func fileExists(filename string) bool {

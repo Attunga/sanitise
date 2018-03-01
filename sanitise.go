@@ -35,7 +35,7 @@ import (
 
 // Need to somehow get this into a different file for neatness maybe?
 type settingsStruct struct {
-	logfileName        string            // Name of Log File to Sanitise
+	fileList           []string          // Name of Log Files to Sanitise
 	sanitiseIPs        bool              // Option to not sanitise IPs in a log file
 	sanitiseEmails     bool              // Option to not sanitise Emails in a log file
 	recordChanges      bool              // (future reference) Option to output a list of changes to the file .. not sure if this should be on
@@ -48,6 +48,8 @@ type settingsStruct struct {
 	docx               bool              // Boolean to cover whether we are using a docx file.
 }
 
+const SanitiseVersion = "0.01 alpha"
+
 func main() {
 
 	startTime := time.Now()
@@ -58,29 +60,30 @@ func main() {
 	log.WithFields(log.Fields{
 		"time":     time.Now().String(),
 		"function": "main",
-		"Log File": settings.logfileName,
+		"Log File": settings.fileList,
 	}).Info("Into Main - Usng Log Level:", log.GetLevel())
 
-	// Read Log File into String
-	//var logFileString string = ""
-	var logFileString = getLogFileString(settings.logfileName)
-	//fmt.Println(logFileString)
-
+	// Load a basic changeMap from a settings file that can be used for all looped change files.
 	// Create a map that is used to store unique changes
 	var changesMap = make(map[string]string)
 
-	// Maybe we need to fork here to either work out whether we are running with a docx or not ... maybe fork to dual functions
-	// that either work with a docx or a text based log file... or do we process these within the same functions for sanatising
 
-	//Search through the log file for IP Addresses and return back a Map of Replacement IPs
-	if settings.sanitiseIPs {
-		changesMap = getIPAddressesFromLogFile(logFileString, changesMap)
+	// Exit Message
+	exitMessage := ""
+
+	// List Log Files one by one
+	for _, filename := range settings.fileList {
+
+		// These could also be threaded in paralelle if needed ... maybe an option to paralellor or serialise
+		fmt.Println("Sanitising", filename)
+		exitMessage = exitMessage + sanitiseFile(filename, settings, changesMap) + "\n"
 	}
 
-	//Search through the log file for Email Addresses
-	if settings.sanitiseEmails {
-		changesMap = getEmailAddressesFromLogFile(logFileString, changesMap)
-	}
+	// Read Log File into String
+	//var logFileString string = ""
+	// Redundant ??var logFileString = getLogFileString(settings.fileList[0])
+	//fmt.Println(logFileString)
+
 
 	// Function to search for known host hames maybe???? ...
 
@@ -90,29 +93,13 @@ func main() {
 	// like the firstwave database accounts and passwords etc...
 	// Really just loads more stuff into changesMap
 
-	// The final change to the changes map is the exclude list - it basically confirms the exclusion list is valid as
-	// a filename format and then removes any of the excluded files from the final Changes map
-	if settings.exclusionsExist {
-		changesMap = processExclusions(settings.excludeList, changesMap)
-	}
 
-	// Pass off Final comparison string to process the log file
-	var logFileProcessed = processLogFile(logFileString, changesMap)
-
-	//var currentTime = fmt.Sprint(int32(time.Now().Unix()))
-	var processedLogFileName = getNextProcessedLogFileName(settings.logfileName, 1) //"processed:" + currentTime + "-" + logfileName
-
-	// Writes a lot file to disk and returns an exit message
-	var exitMessage = writeProcessedLogFileToDisk(processedLogFileName, logFileProcessed)
-
-	// Get a sorted String back from the changesMap that can be used to save to disk or print to screen for debugs
-	changesString := getChangesToString(changesMap)
 
 	// Display Changes to Screen if Option Passed
 	log.WithFields(log.Fields{
 		"time":     time.Now().String(),
 		"function": "main",
-	}).Info("The following changes were made to log files: \n", changesString)
+	}).Info("The following changes were made to log files: \n", "changesString")
 
 	// GEt the next file name to put through .. maybe generisize the name checker function as well
 
@@ -130,6 +117,52 @@ func main() {
 }
 
 // ##### End of Main ############
+
+func sanitiseFile(filename string, settings settingsStruct, changesMap map[string]string) string {
+
+
+	// Maybe we need to fork here to either work out whether we are running with a docx or not ... maybe fork to dual functions
+	// that either work with a docx or a text based log file... or do we process these within the same functions for sanatising
+
+	//Search through the log file for IP Addresses and return back a Map of Replacement IPs
+	if settings.sanitiseIPs {
+		changesMap = getIPAddressesFromLogFile(filename, changesMap)
+	}
+
+	//Search through the log file for Email Addresses
+	if settings.sanitiseEmails {
+		changesMap = getEmailAddressesFromLogFile(filename, changesMap)
+	}
+
+	// The final change to the changes map is the exclude list - it basically confirms the exclusion list is valid as
+	// a filename format and then removes any of the excluded files from the final Changes map
+	if settings.exclusionsExist {
+		changesMap = processExclusions(settings.excludeList, changesMap)
+	}
+
+	// Pass off Final comparison string to process the log file
+	var logFileProcessed = processLogFile(filename, changesMap)
+
+	//var currentTime = fmt.Sprint(int32(time.Now().Unix()))
+	var processedLogFileName = getNextProcessedLogFileName(filename, 1) //"processed:" + currentTime + "-" + logfileName
+
+	// Writes a lot file to disk and returns an exit message
+	var exitMessage = writeProcessedLogFileToDisk(processedLogFileName, logFileProcessed)
+
+	// Get a sorted String back from the changesMap that can be used to save to disk or print to screen for debugs
+	//changesString := getChangesToString(changesMap)
+
+	// Write Changes String to Disk using Filename Extension
+
+	return exitMessage
+
+
+
+}
+
+
+
+
 
 func getIPAddressesFromLogFile(logFileString string, changesMap map[string]string) map[string]string {
 	startTime := time.Now()
@@ -207,7 +240,6 @@ func processLogFile(logFileString string, changesMap map[string]string) string {
 
 	// Total Time Calculation
 
-
 	changeCount := 0
 
 	// We do the less efficient way .. but it gets me there.
@@ -217,9 +249,9 @@ func processLogFile(logFileString string, changesMap map[string]string) string {
 		changeCount++
 
 		fmt.Printf("\rChanges Left to Process: %s Current Operation Took:  %s   Extimated Time to Completion:  %s ",
-		 fmt.Sprint(totalChanges-changeCount),
-		 time.Now().Sub(processStartTime).Round(time.Microsecond).String(),
-		 (time.Now().Sub(processStartTime) * time.Duration(totalChanges-changeCount)).Round(time.Second) )
+			fmt.Sprint(totalChanges-changeCount),
+			time.Now().Sub(processStartTime).Round(time.Microsecond).String(),
+			(time.Now().Sub(processStartTime) * time.Duration(totalChanges-changeCount)).Round(time.Second))
 		//fmt.Printf("key[%s] value[%s]\n", k, v)
 	}
 
@@ -263,7 +295,7 @@ func getNextProcessedLogFileName(logfileName string, count int) string {
 
 	// Get Todays Day in a String
 	t := time.Now()
-	dateString := (t.Format("2006-01-02"))
+	dateString := t.Format("2006-01-02")
 
 	// check if the filename exists
 	filename := "sanitised_" + dateString + "_" + strCount + "_" + logfileName
@@ -323,9 +355,11 @@ func processExclusions(excludeListFileName string, changesMap map[string]string)
 
 func initialiseSettings() settingsStruct {
 
+	// Overrides the help to basically add a custom message about passing a parameter
+	overrideHelp()
+
 	settings := new(settingsStruct)
 
-	logfileNamePtr := flag.String("logfile", "", "The name of the logfile that you wish to sanitise (Required)")
 	sanitiseIPsPtr := flag.Bool("sanitiseips", true, "Locate and Sanitise IP addresses in Log files")
 	sanitiseEmailsPtr := flag.Bool("sanitiseemails", true, "Locate and Sanitise email addresses in Log files")
 	knownDataListPtr := flag.String("knowndatafile", "", "A CSV file with a list of known data and preferred naming - optional")
@@ -334,10 +368,16 @@ func initialiseSettings() settingsStruct {
 	loglevelPtr := flag.String("loglevel", "warn", "The Logging Level we wish to set (debug, info, warn, error) - Default - warn")
 	logToStdOutPtr := flag.Bool("stdout", false, "Send logging messages to standard output instead of to system logging")
 	docxPtr := flag.Bool("docx", false, "Process a Microsoft Word DocX file format")
+	versionPtr := flag.Bool("version", false, "Show sanitiser version")
 
+	// Parse flags so that they can be seen
 	flag.Parse()
 
-	settings.logfileName = *logfileNamePtr
+	if *versionPtr {
+		fmt.Println("Sanitise Version:", SanitiseVersion)
+		os.Exit(0)
+	}
+
 	settings.sanitiseIPs = *sanitiseIPsPtr
 	settings.sanitiseEmails = *sanitiseEmailsPtr
 	//settings.devicesPrefix = getPrefixesMap(devicesPrefixPtr)
@@ -345,26 +385,48 @@ func initialiseSettings() settingsStruct {
 	settings.excludeList = *excludeListPtr
 	settings.exclusionsExist = false
 	settings.docx = *docxPtr
+	settings.fileList = flag.Args()
+
+	// Detect Options being passed after files to be processe,  then give a message and get out
 
 	// No Command Line Arguments Provided or a log filename has not been given
-	if len(os.Args) < 2 || settings.logfileName == "" {
-		fmt.Printf("Please provide the log file to sanitise - %v -logfile=[logfilename]\n", os.Args[0])
+	if len(os.Args) < 2 || len(settings.fileList) == 0 {
+		fmt.Printf("Please provide one or more log files to sanitise - %v [options] [file1] [file2] \n", os.Args[0])
+		fmt.Printf("All optional parameters must come before files to be sanitised")
 		fmt.Printf("For additonal options use - %v -help\n", os.Args[0])
 		os.Exit(0)
 	}
 
-	// Sanity Check the DocX parameters,  if a true is passed for the Docx then we make sure that the file extension is actually a docx
-	if *docxPtr && filepath.Ext(*logfileNamePtr) != ".docx" {
-		fmt.Println("Docx option is passed but filename is not a docx file")
-		fmt.Println("Please provide a docx file - or convert the document to docx format")
+	// Bug out message so that we can give multiple errors at once
+	bugOutMessages := ""
+
+	// Loop through filename parameters and check whether the the files exist and if the DocX parameter
+	// has been passed whether it is a valid docx file.
+	for _, filename := range settings.fileList {
+
+		// Make sure that the file does not start with a dash - this could mean it is a parameter that is being passed
+		// after filenames
+		// if filename.startsWith - then go but
+
+		// Check that our Files given as parameters exist, bug out if there is a file passed as a parameter that does not exist.
+		if filename != "" && !fileExists(filename) {
+			bugOutMessages = bugOutMessages + "I could not find the log file file named: " + filename + "\n"
+		}
+
+		// Sanity Check the DocX parameters,  if a true is passed for the Docx then we make sure that the file extension is actually a docx
+		if *docxPtr && filepath.Ext(filename) != ".docx" {
+			fmt.Println("Docx option is passed but filename is not a docx file")
+			fmt.Println("Please provide a docx file - or convert the document to docx format")
+			os.Exit(0)
+		}
+	}
+
+	// quit if there are file name errors
+	if bugOutMessages != "" {
+		fmt.Print(bugOutMessages)
 		os.Exit(0)
 	}
 
-	// Check that our Files given as parameters exist, bug out if there is a file passed as a parameter that does not exist.
-	bugOutMessages := ""
-	if settings.logfileName != "" && !fileExists(settings.logfileName) {
-		bugOutMessages = "I could not find the log file file named: " + settings.logfileName + "\n"
-	}
 	if settings.excludeList != "" && !fileExists(settings.excludeList) {
 		bugOutMessages = bugOutMessages + "I could not find the exclusions file named: " + settings.excludeList + "\n"
 	} else if settings.excludeList == "" {

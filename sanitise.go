@@ -67,7 +67,6 @@ func main() {
 	// Create a map that is used to store unique changes
 	var changesMap = make(map[string]string)
 
-
 	// Exit Message
 	exitMessage := ""
 
@@ -79,12 +78,6 @@ func main() {
 		exitMessage = exitMessage + sanitiseFile(filename, settings, changesMap) + "\n"
 	}
 
-	// Read Log File into String
-	//var logFileString string = ""
-	// Redundant ??var logFileString = getLogFileString(settings.fileList[0])
-	//fmt.Println(logFileString)
-
-
 	// Function to search for known host hames maybe???? ...
 
 	// (Enable via options) Function to search for devices with start with a part of a name .. things like lx ws mg etc etc
@@ -92,8 +85,6 @@ func main() {
 	// (Enable via Options)Custom Function to search for usernames and passwords ... this might be text in a file,  things
 	// like the firstwave database accounts and passwords etc...
 	// Really just loads more stuff into changesMap
-
-
 
 	// Display Changes to Screen if Option Passed
 	log.WithFields(log.Fields{
@@ -120,18 +111,23 @@ func main() {
 
 func sanitiseFile(filename string, settings settingsStruct, changesMap map[string]string) string {
 
-
 	// Maybe we need to fork here to either work out whether we are running with a docx or not ... maybe fork to dual functions
 	// that either work with a docx or a text based log file... or do we process these within the same functions for sanatising
 
+	// Read Log File into String
+	var logFileString = getLogFileString(filename)
+	//fmt.Println(logFileString)
+
 	//Search through the log file for IP Addresses and return back a Map of Replacement IPs
+	// Could be threaded later
 	if settings.sanitiseIPs {
-		changesMap = getIPAddressesFromLogFile(filename, changesMap)
+		changesMap = getIPAddressesFromLogFile(logFileString, changesMap)
 	}
 
 	//Search through the log file for Email Addresses
+	// Could be threaded later
 	if settings.sanitiseEmails {
-		changesMap = getEmailAddressesFromLogFile(filename, changesMap)
+		changesMap = getEmailAddressesFromLogFile(logFileString, changesMap)
 	}
 
 	// The final change to the changes map is the exclude list - it basically confirms the exclusion list is valid as
@@ -141,7 +137,7 @@ func sanitiseFile(filename string, settings settingsStruct, changesMap map[strin
 	}
 
 	// Pass off Final comparison string to process the log file
-	var logFileProcessed = processLogFile(filename, changesMap)
+	var logFileProcessed = processLogFile(logFileString, changesMap)
 
 	//var currentTime = fmt.Sprint(int32(time.Now().Unix()))
 	var processedLogFileName = getNextProcessedLogFileName(filename, 1) //"processed:" + currentTime + "-" + logfileName
@@ -156,13 +152,7 @@ func sanitiseFile(filename string, settings settingsStruct, changesMap map[strin
 
 	return exitMessage
 
-
-
 }
-
-
-
-
 
 func getIPAddressesFromLogFile(logFileString string, changesMap map[string]string) map[string]string {
 	startTime := time.Now()

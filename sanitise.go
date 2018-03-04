@@ -121,13 +121,13 @@ func sanitiseFile(filename string, settings settingsStruct, changesMap map[strin
 	//Search through the log file for IP Addresses and return back a Map of Replacement IPs
 	// Could be threaded later
 	if settings.sanitiseIPs {
-		changesMap = getIPAddressesFromLogFile(logFileString, changesMap)
+		changesMap = getIPAddressesFromLogFile(&logFileString, changesMap)
 	}
 
 	//Search through the log file for Email Addresses
 	// Could be threaded later
 	if settings.sanitiseEmails {
-		changesMap = getEmailAddressesFromLogFile(logFileString, changesMap)
+		changesMap = getEmailAddressesFromLogFile(&logFileString, changesMap)
 	}
 
 	// The final change to the changes map is the exclude list - it basically confirms the exclusion list is valid as
@@ -137,7 +137,7 @@ func sanitiseFile(filename string, settings settingsStruct, changesMap map[strin
 	}
 
 	// Pass off Final comparison string to process the log file
-	var logFileProcessed = processLogFile(logFileString, changesMap)
+	var logFileProcessed = processLogFile(&logFileString, changesMap)
 
 	//var currentTime = fmt.Sprint(int32(time.Now().Unix()))
 	var processedLogFileName = getNextProcessedLogFileName(filename, 1) //"processed:" + currentTime + "-" + logfileName
@@ -154,13 +154,13 @@ func sanitiseFile(filename string, settings settingsStruct, changesMap map[strin
 
 }
 
-func getIPAddressesFromLogFile(logFileString string, changesMap map[string]string) map[string]string {
+func getIPAddressesFromLogFile(logFileStringPtr *string, changesMap map[string]string) map[string]string {
 	startTime := time.Now()
 	var count int
 
 	re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
 
-	submatchall := re.FindAllString(logFileString, -1)
+	submatchall := re.FindAllString(*logFileStringPtr, -1)
 
 	for _, element := range submatchall {
 		// I don't understand what the underscore does but element is true if it exists
@@ -182,7 +182,7 @@ func getIPAddressesFromLogFile(logFileString string, changesMap map[string]strin
 
 // this function might be changed to give another parameters with type of search and then from that we select the type
 // of regex. This function very much duplicates the IP Address function
-func getEmailAddressesFromLogFile(logFileString string, changesMap map[string]string) map[string]string {
+func getEmailAddressesFromLogFile(logFileStringPtr *string, changesMap map[string]string) map[string]string {
 
 	startTime := time.Now()
 
@@ -192,7 +192,7 @@ func getEmailAddressesFromLogFile(logFileString string, changesMap map[string]st
 
 	re := regexp.MustCompile(regexString)
 
-	submatchall := re.FindAllString(logFileString, -1)
+	submatchall := re.FindAllString(*logFileStringPtr, -1)
 
 	for _, element := range submatchall {
 		// I don't understand what the underscore does but element is true if it exists
@@ -214,14 +214,14 @@ func getEmailAddressesFromLogFile(logFileString string, changesMap map[string]st
 
 }
 
-func processLogFile(logFileString string, changesMap map[string]string) string {
+func processLogFile(logFileStringPtr *string, changesMap map[string]string) string {
 
 	totalChanges := len(changesMap)
 
 	startTime := time.Now()
 
 	// Kind of Redundant .. may remove .. or I might put some meta data in the header from a config file... ummm
-	var logFileProcessedReturn = "\nProcessed log file .......\n" + logFileString
+	*logFileStringPtr = "\nProcessed log file .......\n" + *logFileStringPtr
 
 	// This should be the most  efficient way .. if I could work out how to pass
 	// a F$#Kings data object as a parameters .... GRRRRRRRR
@@ -235,7 +235,7 @@ func processLogFile(logFileString string, changesMap map[string]string) string {
 	// We do the less efficient way .. but it gets me there.
 	for k, v := range changesMap {
 		processStartTime := time.Now()
-		logFileProcessedReturn = strings.Replace(logFileProcessedReturn, k, v, -1)
+		*logFileStringPtr = strings.Replace(*logFileStringPtr, k, v, -1)
 		changeCount++
 
 		fmt.Printf("\rChanges Left to Process: %s Current Operation Took:  %s   Extimated Time to Completion:  %s ",
@@ -250,7 +250,7 @@ func processLogFile(logFileString string, changesMap map[string]string) string {
 		"function": "processLogFile",
 	}).Debug("Total Time Taken to Complete processLogFile: ", time.Now().Sub(startTime).String())
 
-	return logFileProcessedReturn
+	return *logFileStringPtr
 }
 
 func getLogFileString(logfile string) string {

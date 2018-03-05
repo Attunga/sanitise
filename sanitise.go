@@ -48,7 +48,7 @@ type settingsStruct struct {
 	docx               bool              // Boolean to cover whether we are using a docx file.
 }
 
-const SanitiseVersion = "0.01 alpha"
+const sanitiseVersion = "0.01 alpha"
 
 func main() {
 
@@ -364,7 +364,7 @@ func initialiseSettings() settingsStruct {
 	flag.Parse()
 
 	if *versionPtr {
-		fmt.Println("Sanitise Version:", SanitiseVersion)
+		fmt.Println("Sanitise Version:", sanitiseVersion)
 		os.Exit(0)
 	}
 

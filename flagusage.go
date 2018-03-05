@@ -24,7 +24,7 @@ import (
 	"os"
 )
 
-// This is a seperate file so that I can complete rewrite the help output if required.
+// This is a separate file so that I can complete rewrite the help output if required.
 func overrideHelp() {
 
 	flag.Usage = func() {

@@ -54,7 +54,7 @@ func main() {
 
 	startTime := time.Now()
 
-	// Get Settings .... and do messy things like check command line arguements
+	// Get Settings .... and do messy things like check command line arguments
 	settings := initialiseSettings()
 
 	log.WithFields(log.Fields{
@@ -308,7 +308,7 @@ func writeProcessedLogFileToDisk(processedLogFileName string, logFileProcessed s
 		return err.Error()
 	}
 
-	return "\nNew Filename  " + processedLogFileName + " written sucessfully"
+	return "\nNew Filename  " + processedLogFileName + " written successfully"
 }
 
 func processExclusions(excludeListFileName string, changesMap map[string]string) map[string]string {
@@ -383,7 +383,7 @@ func initialiseSettings() settingsStruct {
 	if len(os.Args) < 2 || len(settings.fileList) == 0 {
 		fmt.Printf("Please provide one or more log files to sanitise - %v [options] [file1] [file2] \n", os.Args[0])
 		fmt.Printf("All optional parameters must come before files to be sanitised")
-		fmt.Printf("For additonal options use - %v -help\n", os.Args[0])
+		fmt.Printf("For additional options use - %v -help\n", os.Args[0])
 		os.Exit(0)
 	}
 

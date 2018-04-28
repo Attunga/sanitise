@@ -31,6 +31,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"encoding/csv"
 )
 
 // Need to somehow get this into a different file for neatness maybe?
@@ -45,14 +46,37 @@ type settingsStruct struct {
 	devicesPrefix      map[string]string // Pointer to CSV File with List of prefixes --> [prefix]Naming ie lx Linux_Server##
 	exclusionsExist    bool              // A setting that is set when an exclude List is detected as being passed
 	excludeList        string            // Pointer to file with list of items we wish to exclude - we simple remove these from final map
+	knownItems		   string			 // Filename with a custom list of known items.
 	docx               bool              // Boolean to cover whether we are using a docx file.
 }
 
-const sanitiseVersion = "0.01 alpha"
+// A struct which holds the file to be sanitised as well as it's type and other data
+// It allows auto marking of file type and other metadata to be saved as well as allowing passing to functions to be
+// simplified.
+// ummm .. should it be also linked to it's change may saving parameters that need to be passed in for that file.
+type fileDetails struct {
+	filename       string            // The filename of the file passed
+	fileContents   string            // The actual physical file contents .. may even make this an array spliting up the file into smaller sections
+	fileType       string            // The type of file, for now docx or text
+	fileChangesMap map[string]string // A Map of the changes that will be made to a file
+}
+
+const sanitiseVersion = "0.02 alpha"
 
 func main() {
 
 	startTime := time.Now()
+
+	// Just to shutup Go warnings ...
+	fileDetailsNewFile := fileDetails{
+		"",
+		"",
+		"",
+		nil,
+	}
+
+	// Shutting up go warnings over the new Struct
+	fileDetailsNewFile.filename = "ljdlf"
 
 	// Get Settings .... and do messy things like check command line arguments
 	settings := initialiseSettings()
@@ -66,6 +90,12 @@ func main() {
 	// Load a basic changeMap from a settings file that can be used for all looped change files.
 	// Create a map that is used to store unique changes
 	var changesMap = make(map[string]string)
+
+	// Load in the known items to the changesMap so they are global
+	changesMap = getKnownItems(changesMap,settings.knownItems)
+
+	//Here .. should we also make an exclusions map at this stage and pass it as a parameter for processing
+	// to save constantly reading from file??
 
 	// Exit Message
 	exitMessage := ""
@@ -105,6 +135,62 @@ func main() {
 		"function": "main",
 	}).Debug("Total Time Taken to Complete: ", time.Now().Sub(startTime).String())
 
+}
+func getKnownItems(changesMap map[string]string, knownItems string) map[string]string {
+
+	// Here we look for the convention of a known items csv list (knownitems.csv)
+	// Does known items csv exist
+	if fileExists("knownitems.csv") {
+		changesMap = loadKnownItemsCSV(changesMap, "knownitems.csv")
+	}
+
+
+	// If the known items is empty the option was not passed and we just exit
+	if knownItems == "" {
+		println("No Custom items found")
+		return changesMap
+	}
+
+	// If a known items filename was passwed we process it.
+	// check file name exists,  if it is passed and does not exist then we need to exit with an exception.
+	if fileExists(knownItems) {
+		// Should we confirm csv extension??
+		changesMap = loadKnownItemsCSV(changesMap, knownItems)
+	} else {
+		// A filename was passed but it does not exist,  we exit with an error message now
+		println("A custom known items filename was passed but I could not find the file to read from")
+		println("Custom Filename Passed:", knownItems)
+
+		// Exit Application ....
+		os.Exit(0)
+	}
+
+
+	return changesMap
+}
+func loadKnownItemsCSV(changesMap map[string]string, knownitemscsvfilename string) map[string]string {
+
+	// Open CSV file
+	f, err := os.Open(knownitemscsvfilename)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	// Read File into a Variable
+	lines, err := csv.NewReader(f).ReadAll()
+	if err != nil {
+		panic(err)
+	}
+
+	// Loop through lines & turn into object
+	for _, line := range lines {
+		// Duplicates not allowed but later settings will overwrite newer settings???,  Won't happen later though
+		// might be ok at this stage
+       changesMap[strings.Trim(line[0]," ")] =  strings.Trim(line[1]," ")
+
+	}
+	return changesMap
 }
 
 // ##### End of Main ############
@@ -358,6 +444,7 @@ func initialiseSettings() settingsStruct {
 	loglevelPtr := flag.String("loglevel", "warn", "The Logging Level we wish to set (debug, info, warn, error) - Default - warn")
 	logToStdOutPtr := flag.Bool("stdout", false, "Send logging messages to standard output instead of to system logging")
 	docxPtr := flag.Bool("docx", false, "Process a Microsoft Word DocX file format")
+	knownItems := flag.String("knownitems", "", "A CSV File of known items to be sanitised in format [item].[new_name]")
 	versionPtr := flag.Bool("version", false, "Show sanitiser version")
 
 	// Parse flags so that they can be seen
@@ -376,6 +463,7 @@ func initialiseSettings() settingsStruct {
 	settings.exclusionsExist = false
 	settings.docx = *docxPtr
 	settings.fileList = flag.Args()
+	settings.knownItems = *knownItems
 
 	// Detect Options being passed after files to be processe,  then give a message and get out
 

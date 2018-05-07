@@ -36,7 +36,7 @@ import (
 
 // Need to somehow get this into a different file for neatness maybe?
 type settingsStruct struct {
-	fileList           []string          // Name of Log Files to Sanitise
+	filenameList       []string          // Name of Log Files to Sanitise
 	sanitiseIPs        bool              // Option to not sanitise IPs in a log file
 	sanitiseEmails     bool              // Option to not sanitise Emails in a log file
 	recordChanges      bool              // (future reference) Option to output a list of changes to the file .. not sure if this should be on
@@ -46,7 +46,7 @@ type settingsStruct struct {
 	devicesPrefix      map[string]string // Pointer to CSV File with List of prefixes --> [prefix]Naming ie lx Linux_Server##
 	exclusionsExist    bool              // A setting that is set when an exclude List is detected as being passed
 	excludeList        string            // Pointer to file with list of items we wish to exclude - we simple remove these from final map
-	knownItems		   string			 // Filename with a custom list of known items.
+	knownItems         string            // Filename with a custom list of known items.
 	docx               bool              // Boolean to cover whether we are using a docx file.
 }
 
@@ -67,24 +67,13 @@ func main() {
 
 	startTime := time.Now()
 
-	// Just to shutup Go warnings ...
-	fileDetailsNewFile := fileDetails{
-		"",
-		"",
-		"",
-		nil,
-	}
-
-	// Shutting up go warnings over the new Struct
-	fileDetailsNewFile.filename = "ljdlf"
-
 	// Get Settings .... and do messy things like check command line arguments
 	settings := initialiseSettings()
 
 	log.WithFields(log.Fields{
 		"time":     time.Now().String(),
 		"function": "main",
-		"Log File": settings.fileList,
+		"Log File": settings.filenameList,
 	}).Info("Into Main - Usng Log Level:", log.GetLevel())
 
 	// Load a basic changeMap from a settings file that can be used for all looped change files.
@@ -92,25 +81,45 @@ func main() {
 	var changesMap = make(map[string]string)
 
 	// Load in the known items to the changesMap so they are global
-	changesMap = getKnownItems(changesMap,settings.knownItems)
+	changesMap = getKnownItems(changesMap, settings.knownItems)
 
 	//Here .. should we also make an exclusions map at this stage and pass it as a parameter for processing
 	// to save constantly reading from file??
 
-	// Exit Message
+	// Create a slice of File Structs,  just using the name and confirming that each file exists while trying to detect
+	// the file time,  primarily whether it is word or not - but maybe also looking for Zips etc.
+	fileList := make([]fileDetails, 0)
+	fileList = getFileList(&fileList, settings.filenameList)
+
+	// Create the final Exit Message
 	exitMessage := ""
 
-	// List Log Files one by one
-	for _, filename := range settings.fileList {
+	// Process Log Files One by One
+	for _, fileDetail := range fileList {
 
-		// These could also be threaded in paralelle if needed ... maybe an option to paralellor or serialise
-		fmt.Println("Sanitising", filename)
-		exitMessage = exitMessage + sanitiseFile(filename, settings, changesMap) + "\n"
+		fmt.Println("Filename:", fileDetail.filename)
+		fmt.Println("Type:", fileDetail.fileType)
+
+		// TODO - Do the file sanitising in paraellel - Doing maybe just 4 or so at a time
+		switch fileDetail.fileType {
+		case "txt":
+			fmt.Println("Sanitising Text File", fileDetail.filename)
+			exitMessage = exitMessage + sanitiseTextFile(fileDetail.filename, settings, changesMap) + "\n"
+		case "docx":
+			fmt.Println("Sanitising DocX File", fileDetail.filename)
+			exitMessage = exitMessage + sanitiseDocXFile(fileDetail, settings, changesMap) + "\n"
+		case "bin":
+			fmt.Println("Skipping Binary File", fileDetail.filename)
+		default:
+			fmt.Println("Unknown File Type", fileDetail.filename)
+		}
+
+
 	}
 
-	// Function to search for known host hames maybe???? ...
+	// TODO Function to search for known host hames maybe???? ...
 
-	// (Enable via options) Function to search for devices with start with a part of a name .. things like lx ws mg etc etc
+	// TODO (Enable via options) Function to search for devices with start with a part of a name .. things like lx ws mg etc etc
 
 	// (Enable via Options)Custom Function to search for usernames and passwords ... this might be text in a file,  things
 	// like the firstwave database accounts and passwords etc...
@@ -136,6 +145,28 @@ func main() {
 	}).Debug("Total Time Taken to Complete: ", time.Now().Sub(startTime).String())
 
 }
+// ##### End of Main ############
+
+
+
+
+func getFileList(fileList *[]fileDetails, filenameList []string) []fileDetails {
+
+	for _, filename := range filenameList {
+
+		fileDetailsNewFile := fileDetails{
+			filename,
+			"readFileContents().. maybe later as well due to size limitations,  may load on process",
+			getDetectedFileType(filename),
+			nil,
+		}
+
+		*fileList = append(*fileList, fileDetailsNewFile)
+	}
+
+	return *fileList
+}
+
 func getKnownItems(changesMap map[string]string, knownItems string) map[string]string {
 
 	// Here we look for the convention of a known items csv list (knownitems.csv)
@@ -143,7 +174,6 @@ func getKnownItems(changesMap map[string]string, knownItems string) map[string]s
 	if fileExists("knownitems.csv") {
 		changesMap = loadKnownItemsCSV(changesMap, "knownitems.csv")
 	}
-
 
 	// If the known items is empty the option was not passed and we just exit
 	if knownItems == "" {
@@ -164,7 +194,6 @@ func getKnownItems(changesMap map[string]string, knownItems string) map[string]s
 		// Exit Application ....
 		os.Exit(0)
 	}
-
 
 	return changesMap
 }
@@ -187,20 +216,17 @@ func loadKnownItemsCSV(changesMap map[string]string, knownitemscsvfilename strin
 	for _, line := range lines {
 		// Duplicates not allowed but later settings will overwrite newer settings???,  Won't happen later though
 		// might be ok at this stage
-       changesMap[strings.Trim(line[0]," ")] =  strings.Trim(line[1]," ")
+		changesMap[strings.Trim(line[0], " ")] = strings.Trim(line[1], " ")
 
 	}
 	return changesMap
 }
 
-// ##### End of Main ############
 
-func sanitiseFile(filename string, settings settingsStruct, changesMap map[string]string) string {
 
-	// Maybe we need to fork here to either work out whether we are running with a docx or not ... maybe fork to dual functions
-	// that either work with a docx or a text based log file... or do we process these within the same functions for sanatising
+func sanitiseTextFile(filename string, settings settingsStruct, changesMap map[string]string) string {
 
-	// Read Log File into String
+	// Read Log File into String ... into text
 	var logFileString = getLogFileString(filename)
 	//fmt.Println(logFileString)
 
@@ -240,6 +266,7 @@ func sanitiseFile(filename string, settings settingsStruct, changesMap map[strin
 
 }
 
+
 func getIPAddressesFromLogFile(logFileStringPtr *string, changesMap map[string]string) map[string]string {
 	startTime := time.Now()
 	var count int
@@ -274,7 +301,8 @@ func getEmailAddressesFromLogFile(logFileStringPtr *string, changesMap map[strin
 
 	var count int
 
-	var regexString = "[\\w\\.><]+@[\\w\\.><]+\\.[\\w\\.><]+"
+	//var regexString = "[\\w\\.><]+@[\\w\\.><]+\\.[\\w\\.><]+"
+	var regexString = "[\\w\\.]+@[\\w\\.><]+\\.[\\w\\.]+"
 
 	re := regexp.MustCompile(regexString)
 
@@ -462,13 +490,13 @@ func initialiseSettings() settingsStruct {
 	settings.excludeList = *excludeListPtr
 	settings.exclusionsExist = false
 	settings.docx = *docxPtr
-	settings.fileList = flag.Args()
+	settings.filenameList = flag.Args()
 	settings.knownItems = *knownItems
 
 	// Detect Options being passed after files to be processe,  then give a message and get out
 
 	// No Command Line Arguments Provided or a log filename has not been given
-	if len(os.Args) < 2 || len(settings.fileList) == 0 {
+	if len(os.Args) < 2 || len(settings.filenameList) == 0 {
 		fmt.Printf("Please provide one or more log files to sanitise - %v [options] [file1] [file2] \n", os.Args[0])
 		fmt.Printf("All optional parameters must come before files to be sanitised")
 		fmt.Printf("For additional options use - %v -help\n", os.Args[0])
@@ -480,7 +508,7 @@ func initialiseSettings() settingsStruct {
 
 	// Loop through filename parameters and check whether the the files exist and if the DocX parameter
 	// has been passed whether it is a valid docx file.
-	for _, filename := range settings.fileList {
+	for _, filename := range settings.filenameList {
 
 		// Make sure that the file does not start with a dash - this could mean it is a parameter that is being passed
 		// after filenames
